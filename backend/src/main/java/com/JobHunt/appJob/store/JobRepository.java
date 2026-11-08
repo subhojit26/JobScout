@@ -22,8 +22,27 @@ import java.util.Optional;
 @Repository
 public class JobRepository {
 
-    /** Freshness window: only jobs posted/seen within this many days are emailed or shown. */
-    public static final int FRESH_DAYS = 3;
+    /**
+     * Freshness window: only jobs posted/seen within this many days are emailed or shown on the
+     * dashboard. Defaults to 3, override with the {@code JOBWATCH_FRESHNESS_DAYS} env var (e.g. set
+     * to 30 to surface more matches from ATS boards, whose postings are often older than 3 days).
+     */
+    public static final int FRESH_DAYS = readFreshDays();
+
+    private static int readFreshDays() {
+        String raw = System.getenv("JOBWATCH_FRESHNESS_DAYS");
+        if (raw != null && !raw.isBlank()) {
+            try {
+                int v = Integer.parseInt(raw.trim());
+                if (v > 0) {
+                    return v;
+                }
+            } catch (NumberFormatException ignored) {
+                // fall through to default
+            }
+        }
+        return 3;
+    }
 
     private final JdbcClient jdbc;
 

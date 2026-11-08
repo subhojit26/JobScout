@@ -154,14 +154,29 @@ public class JobWatchPipeline {
         List<JobSource> runSources = (sourceProvider != null)
                 ? sourceProvider.currentSources()
                 : sources;
+
+        // 0. Bootstrap the roster BEFORE fetching when it is empty (first run / fresh DB).
+        //    Otherwise the fetch below would run against 0 sources and return 0 jobs, and the
+        //    newly-discovered boards would only take effect on the NEXT run (the reason a fresh
+        //    reload previously yielded no jobs). discoverIfNeeded is self-gated (no-op when the
+        //    roster already has companies) and memory-bounded.
+        if (allowDiscovery && discoveryService != null && runSources.isEmpty()) {
+            try {
+                log.info("Empty company roster detected — bootstrapping discovery before fetch");
+                discoveryService.discoverIfNeeded(List.of());
+            } catch (Exception e) {
+                log.warn("Pre-fetch company discovery failed (non-fatal): {}", e.toString());
+            }
+            // Re-resolve sources now that the roster may have been populated.
+            runSources = (sourceProvider != null) ? sourceProvider.currentSources() : sources;
+        }
         log.info("Pipeline run started with {} configured source(s)", runSources.size());
 
         // 1. Fetch concurrently
         RunResult result = orchestrator.run(runSources);
 
-        // 1b. Company discovery (Phase 6): bootstrap the roster from seed + harvested Adzuna names.
-        //     Runs only when the roster is empty, so normal runs stay fast. Skipped entirely on
-        //     light (manual) runs to minimize memory/CPU footprint.
+        // 1b. Company discovery (Phase 6): harvest additional boards from this run's Adzuna company
+        //     names. Still self-gated by an empty roster, so it is a no-op once bootstrapped above.
         if (allowDiscovery && discoveryService != null) {
             List<String> harvested = result.jobs().stream()
                     .filter(j -> "adzuna".equals(j.source()))
