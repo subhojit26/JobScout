@@ -48,3 +48,6 @@ backend/src/main/resources/application-local.properties
 *.db-shm
 jobwatch.db*
 
+
+### Oracle VM deployment ###
+deploy/oracle/data/

@@ -231,6 +231,9 @@ public class AppProperties {
         private String cron = "0 0 6 * * *";
         public String getCron()       { return cron; }
         public void setCron(String v) { this.cron = v; }
+        private String zone = "Asia/Kolkata";
+        public String getZone()       { return zone; }
+        public void setZone(String v) { this.zone = v; }
     }
 
     // ── company discovery (Phase 6 / FR-1b) ───────────────────────────────────

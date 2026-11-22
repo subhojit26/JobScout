@@ -1,0 +1,7 @@
+# Caddy gets and renews a free HTTPS certificate for $DOMAIN automatically.
+# The Vercel frontend is served over HTTPS, so the backend must be HTTPS too
+# (browsers block HTTPS pages from calling plain-HTTP APIs).
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy app:8080
+}

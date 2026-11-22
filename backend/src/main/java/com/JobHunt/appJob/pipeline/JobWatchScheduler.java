@@ -50,7 +50,7 @@ public class JobWatchScheduler {
      * Source-level failures (one source down) are tolerated — they appear in the health
      * line included in the digest.</p>
      */
-    @Scheduled(cron = "${jobwatch.schedule.cron:0 0 6 * * *}")
+    @Scheduled(cron = "${jobwatch.schedule.cron:0 0 6 * * *}", zone = "${jobwatch.schedule.zone:Asia/Kolkata}")
     public void runPipeline() {
         runPipelineInternal("scheduled");
     }

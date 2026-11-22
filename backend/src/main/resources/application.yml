@@ -68,6 +68,8 @@ jobwatch:
   # ── scheduler ────────────────────────────────────────────
   schedule:
     cron: "${JOBWATCH_CRON:0 0 6 * * *}"
+    # Time zone for the cron above (6 AM India time, not UTC).
+    zone: "${JOBWATCH_CRON_ZONE:Asia/Kolkata}"
 
   # ── digest ────────────────────────────────────────────────
   digest:

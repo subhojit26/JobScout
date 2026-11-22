@@ -1,0 +1,43 @@
+# JobWatch backend on an Oracle Cloud Always Free VM.
+#   app   - Spring Boot backend (built from the repo's root Dockerfile)
+#   caddy - HTTPS reverse proxy with automatic Let's Encrypt certificates
+# Start/update with:  docker compose up -d --build   (run from this folder)
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: jobwatch-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      SPRING_PROFILES_ACTIVE: dashboard
+      SERVER_ADDRESS: 0.0.0.0
+      PORT: "8080"
+      # SQLite lives on the host in ./data, so jobs survive restarts and redeploys.
+      JOBWATCH_DB: /data/jobwatch.db
+      JAVA_TOOL_OPTIONS: "-Xmx${JAVA_HEAP:-768m} -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m"
+    volumes:
+      - ./data:/data
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2.8.4
+    container_name: jobwatch-caddy
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
