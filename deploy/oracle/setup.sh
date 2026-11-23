@@ -20,6 +20,10 @@ if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>
   sudo apt-get install -y docker.io docker-compose-v2 git curl
   sudo systemctl enable --now docker
 fi
+if ! command -v sqlite3 >/dev/null 2>&1; then
+  log "Installing sqlite3 (used by the backup job)"
+  sudo apt-get install -y sqlite3
+fi
 DOCKER="docker"
 if ! docker info >/dev/null 2>&1; then
   sudo usermod -aG docker "$USER" || true
@@ -85,6 +89,11 @@ for key in ADZUNA_APP_ID ADZUNA_APP_KEY JOBWATCH_EMAIL_FROM SPRING_MAIL_PASSWORD
     echo "WARNING: $key is empty in .env - fetching or the 6 AM email may not work." >&2
   fi
 done
+
+# 5b. Daily database backup at 02:00 India time (20:30 UTC) -------------------------------
+log "Installing daily backup job"
+echo "30 20 * * * root /bin/bash $DEPLOY_DIR/backup.sh >> /var/log/jobwatch-backup.log 2>&1"   | sudo tee /etc/cron.d/jobwatch-backup >/dev/null
+sudo chmod 644 /etc/cron.d/jobwatch-backup
 
 # 6. Build and start ---------------------------------------------------------------------
 log "Building and starting containers (first build takes ~5 minutes)"

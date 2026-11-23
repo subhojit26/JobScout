@@ -117,11 +117,30 @@ All commands run on the VM in `~/JobScout/deploy/oracle`:
 | Live logs | `docker compose logs -f app` |
 | Restart | `docker compose restart app` |
 | Status | `docker compose ps` |
-| Back up the database | `cp data/jobwatch.db ~/jobwatch-$(date +%F).db` |
+| Back up the database now | `sudo bash backup.sh` |
+| Restore a backup | `sudo bash restore.sh backups/jobwatch-<date>.db.gz` |
+| Backup log | `tail /var/log/jobwatch-backup.log` |
 
 The containers restart automatically after crashes and VM reboots, and the digest runs
 every day at 06:00 Asia/Kolkata (change `JOBWATCH_CRON` / `JOBWATCH_CRON_ZONE` in `.env`
 and re-run `bash setup.sh`).
+
+## Backups
+
+`setup.sh` installs a cron job that runs `backup.sh` every day at **02:00 India time**. It takes
+a consistent snapshot of `data/jobwatch.db` (safe while the app runs), checks it, gzips it into
+`backups/` and keeps the newest 7 (`BACKUP_KEEP` in `.env`).
+
+Copies on the same server don't survive losing the server, so also send them off-site, free:
+
+1. Oracle Console → **Storage → Buckets → Create bucket** (name `jobwatch-backups`, Standard tier).
+   Always Free includes 20 GB of Object Storage; a backup is a few MB.
+2. Open the bucket → **Pre-authenticated requests → Create**: target **Bucket**, access
+   **Permit object writes**, expiration a few years out. Copy the URL (it ends in `/o/`).
+3. Put it in `.env` as `BACKUP_UPLOAD_URL=...` and run `sudo bash backup.sh` once to test.
+
+The URL can only *add* files to that bucket, not read or delete them, so a leaked URL can't be
+used to read your data. Download a backup from the bucket page in the Console when you need it.
 
 **Important — idle reclaim:** on a Free Tier account Oracle may stop VMs whose CPU,
 network and memory use stay under ~20% for 7 days. JobWatch is a light app, so it can hit

@@ -51,3 +51,4 @@ jobwatch.db*
 
 ### Oracle VM deployment ###
 deploy/oracle/data/
+deploy/oracle/backups/
