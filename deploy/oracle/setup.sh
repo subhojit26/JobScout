@@ -105,12 +105,6 @@ log "Waiting for https://$DOMAIN/healthz"
 for _ in $(seq 1 60); do
   if curl -fsS -m 5 "https://$DOMAIN/healthz" >/dev/null 2>&1; then
     curl -fsS "https://$DOMAIN/healthz"; echo
-    # Fill the dashboard right away instead of waiting for tomorrow's 6 AM run.
-    total="$(curl -fsS "https://$DOMAIN/api/jobs/reload/status" | grep -o '"total":[0-9]*' | cut -d: -f2 || echo 0)"
-    if [ "${total:-0}" = "0" ]; then
-      log "Database is empty - starting a first job fetch"
-      curl -fsS -X POST "https://$DOMAIN/api/jobs/reload"; echo
-    fi
     log "Backend is live at https://$DOMAIN"
     echo "Next: in Vercel set VITE_API_BASE_URL=https://$DOMAIN and redeploy the frontend."
     exit 0

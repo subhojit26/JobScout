@@ -84,7 +84,7 @@ bash setup.sh
 ```
 
 This builds the app (~5 min the first time), starts it behind HTTPS, checks
-`https://<DOMAIN>/healthz`, and kicks off a first job fetch so the dashboard isn't empty.
+`https://<DOMAIN>/healthz`, and checks that it is healthy. Sign in on the dashboard and press **Reload now** on the Jobs page for a first fetch (otherwise it runs at 6 AM).
 
 ## 6. Point the Vercel frontend at the new backend
 
