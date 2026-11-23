@@ -1,7 +1,6 @@
 package com.JobHunt.appJob.pipeline;
 
 import com.JobHunt.appJob.store.ProfileRepository;
-import com.JobHunt.appJob.store.ProfileRow;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -20,9 +19,14 @@ public class ProfileProvider {
         this.profileRepository = profileRepository;
     }
 
-    /** Currently enabled profiles. */
-    public List<ProfileRow> activeProfiles() {
-        return profileRepository.findAllEnabled();
+    /** Stack keywords across every user's enabled profiles, used for job extraction. */
+    public List<String> allStackKeywords() {
+        return profileRepository.findAllEnabledByUser().values().stream()
+                .flatMap(List::stream)
+                .flatMap(r -> r.stack().stream())
+                .map(String::toLowerCase)
+                .distinct()
+                .toList();
     }
 }
 

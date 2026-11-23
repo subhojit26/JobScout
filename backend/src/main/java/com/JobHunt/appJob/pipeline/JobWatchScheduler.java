@@ -115,7 +115,7 @@ public class JobWatchScheduler {
             // 2. Only the 6am scheduled run should send digest emails.
             // Manual reloads refresh the dashboard without spamming the user.
             if (!manual) {
-                boolean sent = notificationService.sendPendingDigest(summary.healthLine());
+                boolean sent = notificationService.sendPendingDigests(summary.healthLine());
 
                 if (!sent) {
                     // Email failed: do NOT ping success — jobs remain pending for next run

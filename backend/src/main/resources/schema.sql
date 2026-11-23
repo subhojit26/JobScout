@@ -62,11 +62,31 @@ CREATE TABLE IF NOT EXISTS companies (
 );
 CREATE INDEX IF NOT EXISTS idx_companies_enabled ON companies(source, enabled);
 
--- User-editable role profiles (Phase 10 increment). Replaces application.yml profiles as the
--- source of truth once seeded; editable via the dashboard UI. Lists stored comma-separated.
+-- Registered users. Passwords are BCrypt hashes; email is the login and the digest address.
+CREATE TABLE IF NOT EXISTS users (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  email          TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+  name           TEXT,
+  password_hash  TEXT    NOT NULL,
+  digest_enabled INTEGER NOT NULL DEFAULT 1,  -- receive the daily 6 AM email
+  created_at     TEXT    NOT NULL
+);
+
+-- Login sessions. Only a SHA-256 hash of the bearer token is stored.
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash  TEXT    PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at  TEXT    NOT NULL,
+  expires_at  TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+
+-- User-editable role profiles, owned by a user. Lists stored comma-separated.
+-- Pre-accounts databases are rebuilt into this shape by SchemaMigrator.
 CREATE TABLE IF NOT EXISTS profiles (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
-  name           TEXT    NOT NULL UNIQUE,
+  user_id        INTEGER REFERENCES users(id) ON DELETE CASCADE,  -- null only for legacy rows
+  name           TEXT    NOT NULL,
   include_title  TEXT,                        -- role keywords (csv)
   stack          TEXT,                        -- skill/stack keywords (csv)
   exclude_title  TEXT,                        -- disqualifying keywords (csv)
@@ -74,8 +94,22 @@ CREATE TABLE IF NOT EXISTS profiles (
   exp_min        INTEGER,                     -- desired min years (nullable)
   exp_max        INTEGER,                     -- desired max years (nullable)
   enabled        INTEGER NOT NULL DEFAULT 1,
-  is_active      INTEGER NOT NULL DEFAULT 0,  -- FR-39a: the single active profile gates emails
+  is_active      INTEGER NOT NULL DEFAULT 0,  -- active profiles gate what is shown and emailed
   created_at     TEXT    NOT NULL,
-  updated_at     TEXT
+  updated_at     TEXT,
+  UNIQUE (user_id, name)
 );
 
+-- Per-user matches: which stored job matched which of the user's profiles, plus that user's
+-- notification/applied state. The jobs table itself is shared by all users.
+CREATE TABLE IF NOT EXISTS user_jobs (
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  job_id       INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  profile      TEXT    NOT NULL,              -- name of the user's best-matching profile
+  score        INTEGER,
+  notified_at  TEXT,                          -- null until included in this user's digest
+  applied_at   TEXT,                          -- null until the user marks it applied
+  created_at   TEXT    NOT NULL,
+  PRIMARY KEY (user_id, job_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_jobs_pending ON user_jobs(user_id, notified_at);

@@ -1,11 +1,15 @@
 package com.JobHunt.appJob.web.api;
 
+import com.JobHunt.appJob.auth.AuthInterceptor;
+import com.JobHunt.appJob.pipeline.UserMatchService;
 import com.JobHunt.appJob.store.ProfileRepository;
 import com.JobHunt.appJob.store.ProfileRow;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
@@ -14,7 +18,7 @@ import java.util.Map;
 
 /**
  * JSON REST API backing the React dashboard's profile management screens.
- * Loopback-only, single-user; active only under the {@code dashboard} run profile.
+ * Every call is scoped to the signed-in user; active only under the {@code dashboard} run profile.
  */
 @RestController
 @RequestMapping("/api/profiles")
@@ -22,51 +26,75 @@ import java.util.Map;
 public class ProfileApiController {
 
     private final ProfileRepository profiles;
+    private final UserMatchService userMatchService;
 
-    public ProfileApiController(ProfileRepository profiles) {
+    public ProfileApiController(ProfileRepository profiles, UserMatchService userMatchService) {
         this.profiles = profiles;
+        this.userMatchService = userMatchService;
     }
 
-    /** All profiles plus the ids of the currently active ones (multi-select). */
+    /** The signed-in user's profiles plus the ids of the active ones (multi-select). */
     @GetMapping
-    public Map<String, Object> list() {
-        profiles.ensureOneActive();
+    public Map<String, Object> list(@RequestAttribute(AuthInterceptor.USER_ID) long userId) {
+        profiles.ensureOneActive(userId);
         return Map.of(
-                "profiles", profiles.findAll(),
-                "activeIds", profiles.activeProfileIds());
+                "profiles", profiles.findAll(userId),
+                "activeIds", profiles.activeProfileIds(userId));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ProfileRow> get(@PathVariable long id) {
-        return profiles.findById(id).map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<ProfileRow> get(@RequestAttribute(AuthInterceptor.USER_ID) long userId,
+                                          @PathVariable long id) {
+        return profiles.findById(userId, id).map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping
-    public ProfileRow create(@Valid @RequestBody ProfilePayload body) {
-        long id = profiles.insert(body.toRow(null));
-        return profiles.findById(id).orElseThrow();
+    public ProfileRow create(@RequestAttribute(AuthInterceptor.USER_ID) long userId,
+                             @Valid @RequestBody ProfilePayload body) {
+        ProfileRow row = body.toRow(null);
+        requireUniqueName(userId, row.name(), null);
+        boolean first = profiles.findAll(userId).isEmpty();
+        long id = profiles.insert(userId, row);
+        if (first) {
+            profiles.toggleActive(userId, id); // a user's first profile starts active
+        }
+        userMatchService.matchUser(userId);
+        return profiles.findById(userId, id).orElseThrow();
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ProfileRow> update(@PathVariable long id, @Valid @RequestBody ProfilePayload body) {
-        if (profiles.findById(id).isEmpty()) {
+    public ResponseEntity<ProfileRow> update(@RequestAttribute(AuthInterceptor.USER_ID) long userId,
+                                             @PathVariable long id, @Valid @RequestBody ProfilePayload body) {
+        ProfileRow row = body.toRow(id);
+        if (profiles.findById(userId, id).isEmpty()) {
             return ResponseEntity.notFound().build();
         }
-        profiles.update(id, body.toRow(id));
-        return ResponseEntity.of(profiles.findById(id));
+        requireUniqueName(userId, row.name(), id);
+        profiles.update(userId, id, row);
+        userMatchService.matchUser(userId);
+        return ResponseEntity.of(profiles.findById(userId, id));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable long id) {
-        profiles.delete(id);
+    public ResponseEntity<Void> delete(@RequestAttribute(AuthInterceptor.USER_ID) long userId,
+                                       @PathVariable long id) {
+        profiles.delete(userId, id);
+        userMatchService.matchUser(userId);
         return ResponseEntity.noContent().build();
     }
 
     /** Toggles a profile's active state (multi-select). */
     @PostMapping("/{id}/toggle-active")
-    public Map<String, Object> toggleActive(@PathVariable long id) {
-        profiles.toggleActive(id);
-        return Map.of("activeIds", profiles.activeProfileIds());
+    public Map<String, Object> toggleActive(@RequestAttribute(AuthInterceptor.USER_ID) long userId,
+                                            @PathVariable long id) {
+        profiles.toggleActive(userId, id);
+        return Map.of("activeIds", profiles.activeProfileIds(userId));
+    }
+
+    private void requireUniqueName(long userId, String name, Long exceptId) {
+        if (profiles.nameTaken(userId, name, exceptId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "You already have a profile named \"" + name + "\".");
+        }
     }
 
     /** Request body for create/update. List fields accept arrays or comma-separated strings. */

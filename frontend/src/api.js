@@ -9,6 +9,27 @@ const normalizedBase = envBase.replace(/\/$/, '');
 const apiBase = normalizedBase ? `${normalizedBase}/api` : '/api';
 const http = axios.create({ baseURL: apiBase, timeout: 20000 });
 
+// ── Session token ───────────────────────────────────────────────────────────
+// The backend issues an opaque bearer token at login/sign-up. It is kept in localStorage
+// (the API lives on a different origin, so cookies are not an option) and sent on every call.
+const TOKEN_KEY = 'jw_token';
+export const getToken = () => {
+  try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
+};
+export const setToken = (token) => {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch { /* storage unavailable: session lasts for this tab only */ }
+};
+
+/** Fired when the backend rejects the token (expired / signed out elsewhere). */
+export const AUTH_EXPIRED_EVENT = 'jw:auth-expired';
+
+/** Human-readable message from an API error (server message when present). */
+export const errorMessage = (err, fallback = 'Something went wrong') =>
+  err?.response?.data?.message || err?.response?.data?.error || fallback;
+
 // ── Cold-start resilience ─────────────────────────────────────────────────────
 // The backend (Fly) can be cold/booting on first load, returning 502/503/504 or a
 // network error (no CORS headers on the proxy error page). Instead of surfacing a
@@ -24,6 +45,8 @@ const log = (...args) => { if (DEBUG) console.log('[api]', ...args); };
 
 http.interceptors.request.use((config) => {
   config.__start = Date.now();
+  const token = getToken();
+  if (token) config.headers = { ...config.headers, Authorization: `Bearer ${token}` };
   log('→', (config.method || 'get').toUpperCase(), config.baseURL + config.url,
     config.params ? { params: config.params } : '');
   return config;
@@ -49,6 +72,11 @@ http.interceptors.response.use(
     }
     // No response at all (network/CORS-on-error) or a retryable gateway status.
     const status = error.response?.status;
+    if (status === 401 && !String(config.url || '').startsWith('/auth/')) {
+      setToken(null);
+      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+      return Promise.reject(error);
+    }
     const isRetryable = status == null || RETRYABLE_STATUS.has(status);
     config.__retryCount = config.__retryCount || 0;
 
@@ -66,6 +94,14 @@ http.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+// ── Account ─────────────────────────────────────────────────────────────────
+export const signUp = (payload) => http.post('/auth/signup', payload).then((r) => r.data);
+export const logIn = (payload) => http.post('/auth/login', payload).then((r) => r.data);
+export const logOut = () => http.post('/auth/logout').then(() => undefined);
+export const getMe = () => http.get('/auth/me').then((r) => r.data);
+export const updateMe = (payload) => http.put('/auth/me', payload).then((r) => r.data);
+export const changePassword = (payload) => http.post('/auth/password', payload).then((r) => r.data);
 
 // ── Profiles ────────────────────────────────────────────────────────────────
 export const getProfiles = () => http.get('/profiles').then((r) => r.data);

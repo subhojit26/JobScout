@@ -9,7 +9,7 @@ import {
   IconCode, IconBuilding, IconSettings,
 } from '@tabler/icons-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getProfile, createProfile, updateProfile } from '../api.js';
+import { getProfile, createProfile, updateProfile, errorMessage } from '../api.js';
 import { PageHeader, PageLoader } from '../components/ui.jsx';
 
 const EMPTY = {
@@ -71,8 +71,8 @@ export default function ProfileFormPage() {
       }
       notifications.show({ color: 'teal', message: `Profile "${form.name}" saved` });
       nav('/profiles');
-    } catch {
-      notifications.show({ color: 'red', message: 'Save failed' });
+    } catch (err) {
+      notifications.show({ color: 'red', message: errorMessage(err, 'Save failed') });
     } finally {
       setSaving(false);
     }

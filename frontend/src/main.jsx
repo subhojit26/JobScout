@@ -8,6 +8,7 @@ import '@mantine/notifications/styles.css';
 import './styles.css';
 
 import App from './App.jsx';
+import { AuthProvider } from './auth.jsx';
 import { theme } from './theme.js';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -16,7 +17,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <MantineProvider theme={theme} defaultColorScheme="auto">
       <Notifications position="top-right" />
       <BrowserRouter>
-        <App />
+        <AuthProvider>
+          <App />
+        </AuthProvider>
       </BrowserRouter>
     </MantineProvider>
   </React.StrictMode>

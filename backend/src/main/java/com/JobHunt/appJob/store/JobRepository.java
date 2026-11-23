@@ -51,7 +51,7 @@ public class JobRepository {
     }
 
     /** ISO-8601 cutoff instant; jobs older than this are considered stale. */
-    private static String freshnessCutoff() {
+    public static String freshnessCutoff() {
         return Instant.now().minus(Duration.ofDays(FRESH_DAYS)).toString();
     }
 
@@ -193,6 +193,22 @@ public class JobRepository {
                 .param("when", ts)
                 .param("ids", ids)
                 .update();
+    }
+
+    /** All stored jobs inside the freshness window (posted/fetched within FRESH_DAYS). */
+    public List<StoredJob> findFresh() {
+        return jdbc.sql("""
+                SELECT * FROM jobs
+                WHERE datetime(COALESCE(posted_at, fetched_at)) >= datetime(:cutoff)
+                """)
+                .param("cutoff", freshnessCutoff())
+                .query(JobRepository::mapRow)
+                .list();
+    }
+
+    public Optional<StoredJob> findById(long id) {
+        return jdbc.sql("SELECT * FROM jobs WHERE id = :id").param("id", id)
+                .query(JobRepository::mapRow).optional();
     }
 
     /** Looks up a job by its natural key. */
