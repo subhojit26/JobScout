@@ -3,9 +3,7 @@ package com.JobHunt.appJob.pipeline;
 import com.JobHunt.appJob.config.AppProperties;
 import com.JobHunt.appJob.dedupe.JobDeduplicator;
 import com.JobHunt.appJob.filter.JobFilter;
-import com.JobHunt.appJob.filter.JobMatch;
 import com.JobHunt.appJob.filter.Profile;
-import com.JobHunt.appJob.filter.ProfileMatcher;
 import com.JobHunt.appJob.model.Job;
 import com.JobHunt.appJob.orchestration.RunOrchestrator;
 import com.JobHunt.appJob.orchestration.RunResult;
@@ -21,7 +19,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -34,8 +31,8 @@ import java.util.stream.Collectors;
  *      ↓  JobDeduplicator (exact + cross-source)
  *      ↓  ExtractionService (experience, stack tags)
  *      ↓  JobFilter (global eligibility)
- *      ↓  ProfileMatcher (best-match profile + score)
- *      ↓  insertIfNew / first-run seed
+ *      ↓  insertIfNew (shared job pool)
+ *      ↓  UserMatchService (each user's profiles → user_jobs)
  *      ↓  SourceRunRepository.save (stats)
  *   RunSummary
  * </pre>
@@ -53,7 +50,6 @@ public class JobWatchPipeline {
     private final JobDeduplicator deduplicator;
     private final ExtractionService extraction;
     private final JobFilter filter;
-    private final ProfileMatcher profileMatcher;
     private final List<Profile> profiles;
     private final List<String> stackKeywords;
     private final JobRepository jobRepository;
@@ -63,6 +59,7 @@ public class JobWatchPipeline {
     private final JobSourceProvider sourceProvider;        // dynamic roster (prod); null in tests
     private final CompanyDiscoveryService discoveryService; // nullable (tests)
     private final ProfileProvider profileProvider;          // DB-backed profiles (prod); null in tests
+    private final UserMatchService userMatchService;        // per-user matching (prod); may be null in tests
 
     /** Production constructor: sources come from the discovered roster, with company discovery. */
     @org.springframework.beans.factory.annotation.Autowired
@@ -75,9 +72,10 @@ public class JobWatchPipeline {
             JobSourceProvider sourceProvider,
             CompanyDiscoveryService discoveryService,
             ProfileProvider profileProvider,
+            UserMatchService userMatchService,
             AppProperties appProperties) {
         this(orchestrator, deduplicator, jobRepository, sourceRunRepository, firstRunSeeder,
-                null, sourceProvider, discoveryService, profileProvider, appProperties);
+                null, sourceProvider, discoveryService, profileProvider, userMatchService, appProperties);
     }
 
     /** Test constructor: a fixed list of stub sources, no discovery. */
@@ -88,9 +86,10 @@ public class JobWatchPipeline {
             SourceRunRepository sourceRunRepository,
             FirstRunSeeder firstRunSeeder,
             List<JobSource> sources,
+            UserMatchService userMatchService,
             AppProperties appProperties) {
         this(orchestrator, deduplicator, jobRepository, sourceRunRepository, firstRunSeeder,
-                sources, null, null, null, appProperties);
+                sources, null, null, null, userMatchService, appProperties);
     }
 
     private JobWatchPipeline(
@@ -103,8 +102,10 @@ public class JobWatchPipeline {
             JobSourceProvider sourceProvider,
             CompanyDiscoveryService discoveryService,
             ProfileProvider profileProvider,
+            UserMatchService userMatchService,
             AppProperties appProperties) {
 
+        this.userMatchService = userMatchService;
         this.orchestrator = orchestrator;
         this.deduplicator = deduplicator;
         this.jobRepository = jobRepository;
@@ -115,7 +116,6 @@ public class JobWatchPipeline {
         this.discoveryService = discoveryService;
         this.profileProvider = profileProvider;
         this.extraction = new ExtractionService();
-        this.profileMatcher = new ProfileMatcher(appProperties.getMatchMinScore());
 
         // Build filter and profile list from typed config
         this.filter = new JobFilter(appProperties.getFilters().toFilterProfile());
@@ -210,26 +210,19 @@ public class JobWatchPipeline {
         List<Job> deduped = deduplicator.deduplicate(allJobs);
         log.info("After dedupe: {} job(s)", deduped.size());
 
-        // Resolve active profiles for this run: DB-backed (prod) or config (tests).
-        List<com.JobHunt.appJob.store.ProfileRow> activeRows =
-                (profileProvider != null) ? profileProvider.activeProfiles() : List.of();
-        List<Profile> runProfiles;
-        List<String> runStackKeywords;
-        java.util.Map<String, com.JobHunt.appJob.store.ProfileRow> rowsByName = new java.util.HashMap<>();
-        if (!activeRows.isEmpty()) {
-            runProfiles = activeRows.stream().map(com.JobHunt.appJob.store.ProfileRow::toProfile).toList();
-            runStackKeywords = activeRows.stream()
-                    .flatMap(r -> r.stack().stream()).distinct().collect(Collectors.toList());
-            activeRows.forEach(r -> rowsByName.put(r.name(), r));
-        } else {
-            runProfiles = this.profiles;
+        // Stack keywords for extraction: union of every user's enabled profiles (DB) or config (tests).
+        List<String> runStackKeywords = (profileProvider != null)
+                ? profileProvider.allStackKeywords()
+                : this.stackKeywords;
+        if (runStackKeywords.isEmpty()) {
             runStackKeywords = this.stackKeywords;
         }
+        final List<String> extractionKeywords = runStackKeywords;
 
         // 4. Enrich with extraction (experience, stack)
         List<Job> enriched = deduped.stream()
                 .map(job -> {
-                    EnrichedJob e = extraction.enrich(job, runStackKeywords);
+                    EnrichedJob e = extraction.enrich(job, extractionKeywords);
                     // Re-build job with extracted experience/stack merged in
                     return Job.builder()
                             .source(job.source())
@@ -260,48 +253,27 @@ public class JobWatchPipeline {
         List<Job> eligible = filter.filter(enriched);
         log.info("After global filter: {} eligible job(s)", eligible.size());
 
-        // 6. Profile match — only keep jobs that match at least one profile
-        List<JobMatch> matched = eligible.stream()
-                .map(job -> profileMatcher.bestMatch(job, runProfiles))
-                .filter(Optional::isPresent)
-                .map(Optional::get)
-                .filter(m -> passesProfileConstraints(m, rowsByName))
-                .collect(Collectors.toList());
-        log.info("Profile-matched: {} job(s)", matched.size());
-
-        // 7. Persist matched jobs, applying first-run seeding per source
-        int newJobs = 0;
+        // 6. Persist every eligible job once into the shared pool. Per-user state lives in
+        //    user_jobs, so the legacy notified_at column is stamped to keep old readers inert.
+        int stored = 0;
         Instant now = Instant.now();
-        for (JobMatch m : matched) {
-            Job job = m.job();
-            String source = job.source();
-            StoredJob base = StoredJob.fromJob(job).withMatch(m.profileName(), m.score());
-
-            if (firstRunSeeder.isFirstRun(source)) {
-                // First run: seed this job (suppresses old ones, keeps recent ones)
-                newJobs += seedSingleJob(base, now);
-            } else {
-                boolean inserted = jobRepository.insertIfNew(base);
-                if (inserted) {
-                    newJobs++;
-                }
-            }
-        }
-
-        // Also insert non-matching eligible jobs with notified_at=now (so we don't reprocess)
-        // This is required by PRD: "Store non-matching jobs too (matched = 0)"
         for (Job job : eligible) {
-            boolean alreadyMatched = matched.stream()
-                    .anyMatch(m -> m.job().source().equals(job.source())
-                            && m.job().sourceJobId().equals(job.sourceJobId()));
-            if (!alreadyMatched) {
-                // Insert suppressed: never emailed but prevents re-processing
-                StoredJob suppressed = StoredJob.fromJob(job).withNotifiedAt(now);
-                jobRepository.insertIfNew(suppressed);
+            if (jobRepository.insertIfNew(StoredJob.fromJob(job).withNotifiedAt(now))) {
+                stored++;
             }
         }
+        log.info("Stored {} new eligible job(s)", stored);
 
-        log.info("Pipeline run complete: {} new job(s) pending notification", newJobs);
+        // 7. Match the fresh pool against each user's own profiles.
+        int matchedCount = 0;
+        int newJobs = 0;
+        if (userMatchService != null) {
+            UserMatchService.Result r = userMatchService.matchAllUsers();
+            matchedCount = r.jobsMatched();
+            newJobs = r.newMatches();
+        }
+
+        log.info("Pipeline run complete: {} new per-user match(es) pending notification", newJobs);
 
         // Build health line for any failing sources
         String healthLine = buildHealthLine(result.sourceStats());
@@ -311,63 +283,10 @@ public class JobWatchPipeline {
                 allJobs.size(),
                 deduped.size(),
                 eligible.size(),
-                matched.size(),
+                matchedCount,
                 newJobs,
                 healthLine
         );
-    }
-
-    /**
-     * Applies per-profile constraints (Phase 10 increment): desired experience range and
-     * preferred-companies list, taken from the DB-backed profile the job matched.
-     *
-     * <p>Experience: if the profile sets a range and the job's extracted experience is known,
-     * the job must overlap that range. Jobs with unknown experience pass (don't guess).</p>
-     * <p>Companies: if the profile lists preferred companies, the job's company must contain one
-     * of them (case-insensitive). Empty list = any company.</p>
-     */
-    private static boolean passesProfileConstraints(
-            JobMatch m, java.util.Map<String, com.JobHunt.appJob.store.ProfileRow> rowsByName) {
-        com.JobHunt.appJob.store.ProfileRow row = rowsByName.get(m.profileName());
-        if (row == null) {
-            return true; // config-mode or unknown profile: no extra constraints
-        }
-        Job job = m.job();
-
-        // Experience overlap (only when the job's experience is known)
-        Integer jMin = job.minExperienceYears();
-        Integer jMax = job.maxExperienceYears();
-        Integer pMin = row.expMin();
-        Integer pMax = row.expMax();
-        if (pMax != null && jMin != null && jMin > pMax) {
-            return false;
-        }
-        if (pMin != null && jMax != null && jMax < pMin) {
-            return false;
-        }
-
-        // Preferred companies
-        if (!row.companies().isEmpty() && job.company() != null) {
-            String company = job.company().toLowerCase();
-            boolean hit = row.companies().stream()
-                    .anyMatch(c -> company.contains(c.toLowerCase()));
-            if (!hit) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * Seeds a single job, applying the 48h threshold.
-     * Returns 1 if the job was inserted as pending (recent), 0 otherwise.
-     */
-    private int seedSingleJob(StoredJob base, Instant now) {
-        boolean recent = base.postedAt() != null
-                && java.time.Duration.between(base.postedAt(), now).toHours() <= 48;
-        StoredJob stored = base.withNotifiedAt(recent ? null : now);
-        boolean inserted = jobRepository.insertIfNew(stored);
-        return (inserted && recent) ? 1 : 0;
     }
 
     private static String buildHealthLine(List<SourceStats> stats) {

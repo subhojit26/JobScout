@@ -1,18 +1,51 @@
 import {
-  AppShell, Group, Text, NavLink, Box, ActionIcon, Burger, Tooltip, Stack, Badge,
-  useMantineColorScheme, useComputedColorScheme,
+  AppShell, Group, Text, NavLink, Box, ActionIcon, Burger, Tooltip, Stack, Badge, Menu, Avatar,
+  UnstyledButton, useMantineColorScheme, useComputedColorScheme,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import {
   IconUsers, IconChartAreaLine, IconBriefcase2, IconSun, IconMoonStars, IconRadar2,
+  IconUserCircle, IconLogout,
 } from '@tabler/icons-react';
-import { NavLink as RouterNavLink, useLocation } from 'react-router-dom';
+import { NavLink as RouterNavLink, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth.jsx';
 
 const LINKS = [
   { to: '/profiles', label: 'Profiles', hint: 'What you’re hunting for', icon: IconUsers },
   { to: '/jobs', label: 'Jobs', hint: 'Matches & applications', icon: IconBriefcase2 },
   { to: '/analytics', label: 'Analytics', hint: 'Trends & insights', icon: IconChartAreaLine },
+  { to: '/account', label: 'Account', hint: 'Email & password', icon: IconUserCircle },
 ];
+
+/** Avatar menu in the header: who is signed in, account settings, sign out. */
+function AccountMenu() {
+  const { user, logout } = useAuth();
+  const nav = useNavigate();
+  const label = user?.name || user?.email || '';
+  return (
+    <Menu position="bottom-end" width={240} shadow="md">
+      <Menu.Target>
+        <UnstyledButton aria-label="Account menu">
+          <Avatar color="brand" radius="xl" size={36}>{label.slice(0, 1).toUpperCase()}</Avatar>
+        </UnstyledButton>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Label>
+          <Text fz="sm" fw={600} c="var(--mantine-color-text)" truncate>{user?.name || 'Signed in'}</Text>
+          <Text fz="xs" c="dimmed" truncate>{user?.email}</Text>
+        </Menu.Label>
+        <Menu.Divider />
+        <Menu.Item leftSection={<IconUserCircle size={16} />} onClick={() => nav('/account')}>
+          Account settings
+        </Menu.Item>
+        <Menu.Item color="red" leftSection={<IconLogout size={16} />}
+          onClick={async () => { await logout(); nav('/login', { replace: true }); }}>
+          Sign out
+        </Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
+  );
+}
 
 function ColorSchemeToggle() {
   const { setColorScheme } = useMantineColorScheme();
@@ -74,6 +107,7 @@ export default function Layout({ children }) {
           <Group gap="xs">
             <Badge variant="dot" color="teal" size="lg" visibleFrom="xs">Live</Badge>
             <ColorSchemeToggle />
+            <AccountMenu />
           </Group>
         </Group>
       </AppShell.Header>

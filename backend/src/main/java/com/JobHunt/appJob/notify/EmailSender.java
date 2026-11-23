@@ -5,12 +5,14 @@ import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 /**
- * Sends multipart (HTML + plain-text) emails via Spring's {@link JavaMailSender}.
+ * Sends multipart (HTML + plain-text) emails via Spring's {@link JavaMailSender}, from the
+ * configured sender address to a given recipient.
  */
 @Service
 public class EmailSender {
@@ -19,23 +21,20 @@ public class EmailSender {
 
     private final JavaMailSender mailSender;
     private final String fromEmail;
-    private final String toEmail;
     private final boolean mailEnabled;
 
     public EmailSender(@Autowired(required = false) JavaMailSender mailSender,
                        EmailProperties emailProperties) {
         this.mailSender = mailSender;
         this.fromEmail = emailProperties.from();
-        this.toEmail = emailProperties.to();
-        this.mailEnabled = mailSender != null
-                && fromEmail != null && !fromEmail.isBlank()
-                && toEmail   != null && !toEmail.isBlank();
+        this.mailEnabled = mailSender != null && fromEmail != null && !fromEmail.isBlank();
     }
 
-    public boolean send(DigestEmail digest) {
-        if (!mailEnabled) {
-            log.warn("Email not configured (mailSender={}, from='{}', to='{}'). Skipping.",
-                    mailSender != null, fromEmail, toEmail);
+    public boolean send(DigestEmail digest, String toEmail) {
+        if (!mailEnabled || toEmail == null || toEmail.isBlank()) {
+            log.warn("Email not configured (mailSender={}, from set={}, to set={}). Skipping.",
+                    mailSender != null, fromEmail != null && !fromEmail.isBlank(),
+                    toEmail != null && !toEmail.isBlank());
             return false;
         }
         try {
@@ -46,12 +45,11 @@ public class EmailSender {
             helper.setSubject(digest.subject());
             helper.setText(digest.textBody(), digest.htmlBody());
             mailSender.send(msg);
-            log.info("Digest email sent to {} ({} job(s))", toEmail, digest.jobs().size());
+            log.info("Digest email sent ({} job(s))", digest.jobs().size());
             return true;
-        } catch (MessagingException e) {
+        } catch (MessagingException | MailException e) {
             log.error("Failed to send digest email", e);
             return false;
         }
     }
 }
-
