@@ -113,3 +113,10 @@ CREATE TABLE IF NOT EXISTS user_jobs (
   PRIMARY KEY (user_id, job_id)
 );
 CREATE INDEX IF NOT EXISTS idx_user_jobs_pending ON user_jobs(user_id, notified_at);
+
+-- Company-discovery memory: every slug probed (live or not) and when, so incremental discovery
+-- only tries new candidates and re-checks dead ones occasionally.
+CREATE TABLE IF NOT EXISTS discovery_probes (
+  slug       TEXT PRIMARY KEY,
+  probed_at  TEXT NOT NULL
+);
