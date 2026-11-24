@@ -53,6 +53,29 @@ public class CompanyRepository {
                 .list();
     }
 
+    /** Every slug already on the roster, for any source. */
+    public java.util.Set<String> knownSlugs() {
+        return new java.util.HashSet<>(jdbc.sql("SELECT DISTINCT slug FROM companies")
+                .query(String.class).list());
+    }
+
+    /** Slugs probed by discovery at or after {@code since}. */
+    public java.util.Set<String> probedSince(Instant since) {
+        return new java.util.HashSet<>(jdbc.sql("SELECT slug FROM discovery_probes WHERE probed_at >= :since")
+                .param("since", since.toString()).query(String.class).list());
+    }
+
+    /** Remembers that these slugs were probed now, live or not, so they aren't re-probed daily. */
+    public void recordProbes(java.util.Collection<String> slugs, Instant when) {
+        for (String slug : slugs) {
+            jdbc.sql("""
+                    INSERT INTO discovery_probes (slug, probed_at) VALUES (:slug, :when)
+                    ON CONFLICT(slug) DO UPDATE SET probed_at = excluded.probed_at
+                    """)
+                    .param("slug", slug).param("when", when.toString()).update();
+        }
+    }
+
     /** All rows (mainly for diagnostics/tests). */
     public List<Company> findAll() {
         return jdbc.sql("SELECT * FROM companies ORDER BY source, slug")

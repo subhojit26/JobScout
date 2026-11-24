@@ -247,7 +247,7 @@ class PipelineIntegrationTest {
         StubDigestBuilder() { super(null); }
 
         @Override
-        public DigestEmail build(List<JobMatch> jobMatches, String sourceHealthLine) {
+        public DigestEmail build(List<JobMatch> jobMatches, String sourceHealthLine, String recipientName) {
             if (jobMatches == null || jobMatches.isEmpty()) return null;
             List<Job> jobs = jobMatches.stream().map(JobMatch::job).toList();
             return DigestEmail.of("stub subject", "<html/>", "stub text",

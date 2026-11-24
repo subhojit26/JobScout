@@ -177,6 +177,20 @@ jobwatch:
     ashby:
       enabled: true
 
+    # SmartRecruiters company boards (India postings only); companies come from discovery.
+    smartrecruiters:
+      enabled: true
+
+    # Remote-job boards. Only listings open to candidates in India (or worldwide) are kept.
+    himalayas:
+      enabled: true
+    remotive:
+      enabled: true
+
+    # Search-based sources (Adzuna, Himalayas) search for the role keywords in users' active
+    # profiles, topped up with adzuna.queries below, at most this many searches per run.
+    max-queries: ${JOBWATCH_MAX_QUERIES:8}
+
     adzuna:
       enabled: true
       country: in

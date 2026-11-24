@@ -149,6 +149,22 @@ public class ProfileRepository {
                 .param("u", userId).update();
     }
 
+    /**
+     * Role keywords of every user's active profiles, most common first. Used to drive the
+     * search-based sources so each user's interests are actually searched for.
+     */
+    public List<String> activeRoleKeywords() {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        jdbc.sql("SELECT include_title FROM profiles WHERE user_id IS NOT NULL AND enabled = 1 AND is_active = 1")
+                .query(String.class).list()
+                .forEach(csv -> split(csv).forEach(k ->
+                        counts.merge(k.toLowerCase(java.util.Locale.ROOT), 1, Integer::sum)));
+        return counts.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .map(Map.Entry::getKey)
+                .toList();
+    }
+
     /** Hands profiles created before accounts existed (user_id NULL) to the given user. */
     public int claimLegacyProfiles(long userId) {
         return jdbc.sql("UPDATE profiles SET user_id = :u WHERE user_id IS NULL")

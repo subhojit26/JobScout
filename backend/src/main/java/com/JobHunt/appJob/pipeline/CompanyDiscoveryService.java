@@ -6,6 +6,7 @@ import com.JobHunt.appJob.source.AshbyJobSource;
 import com.JobHunt.appJob.source.GreenhouseJobSource;
 import com.JobHunt.appJob.source.JobSource;
 import com.JobHunt.appJob.source.LeverJobSource;
+import com.JobHunt.appJob.source.SmartRecruitersJobSource;
 import com.JobHunt.appJob.store.CompanyRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -77,35 +79,61 @@ public class CompanyDiscoveryService {
         this.config = appProperties.getDiscovery();
     }
 
+    /** How long a probed slug is skipped before it is tried again. */
+    static final Duration REPROBE_AFTER = Duration.ofDays(30);
+    /** Minimum gap between incremental discovery passes (so manual reloads stay light). */
+    static final Duration INCREMENTAL_EVERY = Duration.ofHours(20);
+
+    private volatile Instant lastIncremental;
+
     /**
-     * Runs discovery only when the roster is empty (bootstrap). Keeps normal 30-minute runs fast;
-     * the roster can be re-seeded by clearing the {@code companies} table.
+     * Bootstraps the roster when it is empty; otherwise, at most once per
+     * {@link #INCREMENTAL_EVERY}, probes <em>new</em> candidates (seed list + company names
+     * harvested from this run's results) that are not on the roster and were not probed in the
+     * last {@link #REPROBE_AFTER}. The roster therefore keeps growing day by day.
      *
-     * @param harvestedCompanyNames company display names harvested from this run's Adzuna results
-     *                              (may be empty); used as additional candidates when enabled
+     * @param harvestedCompanyNames company display names harvested from this run's results
      */
     public void discoverIfNeeded(List<String> harvestedCompanyNames) {
         if (!config.isEnabled()) {
             return;
         }
-        if (!companyRepository.isEmpty()) {
-            return; // already bootstrapped
+        if (companyRepository.isEmpty()) {
+            discover(harvestedCompanyNames, false);
+            return;
         }
-        discover(harvestedCompanyNames);
+        Instant last = lastIncremental;
+        if (last != null && last.plus(INCREMENTAL_EVERY).isAfter(Instant.now())) {
+            return;
+        }
+        lastIncremental = Instant.now();
+        discover(harvestedCompanyNames, true);
     }
 
     /** Probes all candidate slugs and persists live boards. */
     public void discover(List<String> harvestedCompanyNames) {
+        discover(harvestedCompanyNames, false);
+    }
+
+    private void discover(List<String> harvestedCompanyNames, boolean onlyNew) {
         Set<String> candidates = new LinkedHashSet<>(loadSeed());
         if (config.isHarvestFromAdzuna() && harvestedCompanyNames != null) {
             for (String name : harvestedCompanyNames) {
                 candidates.addAll(slugCandidates(name));
             }
         }
+        if (onlyNew) {
+            candidates.removeAll(companyRepository.knownSlugs());
+            candidates.removeAll(companyRepository.probedSince(Instant.now().minus(REPROBE_AFTER)));
+        }
 
         List<String> capped = candidates.stream().limit(config.getMaxProbesPerRun()).toList();
-        log.info("Company discovery: probing {} candidate slug(s) against Greenhouse/Lever/Ashby",
-                capped.size());
+        if (capped.isEmpty()) {
+            log.info("Company discovery: no new candidates to probe");
+            return;
+        }
+        log.info("Company discovery ({}): probing {} candidate slug(s) against "
+                + "Greenhouse/Lever/Ashby/SmartRecruiters", onlyNew ? "incremental" : "bootstrap", capped.size());
 
         Instant now = Instant.now();
         int discovered = 0;
@@ -124,6 +152,7 @@ public class CompanyDiscoveryService {
                 }
             }
         }
+        companyRepository.recordProbes(capped, now);
         log.info("Company discovery complete: {} live board(s) persisted", discovered);
     }
 
@@ -139,6 +168,9 @@ public class CompanyDiscoveryService {
                         (s, f) -> new LeverJobSource(s, s, f));
                 found += probe(AshbyJobSource.SOURCE, slug, now,
                         (s, f) -> new AshbyJobSource(s, s, f));
+                // India-only postings, so a hit means this company is hiring in India.
+                found += probe(SmartRecruitersJobSource.SOURCE, slug, now,
+                        (s, f) -> new SmartRecruitersJobSource(s, f));
                 return new int[]{found};
             } finally {
                 gate.release();

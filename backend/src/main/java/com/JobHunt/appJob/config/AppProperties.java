@@ -165,6 +165,20 @@ public class AppProperties {
         private AtsSourceConfig lever      = new AtsSourceConfig();
         private AtsSourceConfig ashby      = new AtsSourceConfig();
         private AdzunaConfig    adzuna     = new AdzunaConfig();
+        private AtsSourceConfig smartrecruiters = new AtsSourceConfig();
+        private AtsSourceConfig himalayas  = new AtsSourceConfig();
+        private AtsSourceConfig remotive   = new AtsSourceConfig();
+        /** Most search queries per run for query-driven sources (Adzuna, Himalayas). */
+        private int maxQueries = 8;
+
+        public AtsSourceConfig getSmartrecruiters() { return smartrecruiters; }
+        public void setSmartrecruiters(AtsSourceConfig v) { this.smartrecruiters = v; }
+        public AtsSourceConfig getHimalayas() { return himalayas; }
+        public void setHimalayas(AtsSourceConfig v) { this.himalayas = v; }
+        public AtsSourceConfig getRemotive() { return remotive; }
+        public void setRemotive(AtsSourceConfig v) { this.remotive = v; }
+        public int getMaxQueries() { return maxQueries; }
+        public void setMaxQueries(int v) { this.maxQueries = v; }
 
         public AtsSourceConfig getGreenhouse() { return greenhouse; }
         public void setGreenhouse(AtsSourceConfig v) { this.greenhouse = v; }
