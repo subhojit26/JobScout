@@ -1,191 +1,196 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Digest</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-            background: #f5f5f5;
-        }
-        .container {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .header {
-            border-bottom: 2px solid #007bff;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-        }
-        .job {
-            border-left: 4px solid #007bff;
-            padding: 15px;
-            margin: 15px 0;
-            background: #f9f9f9;
-            border-radius: 4px;
-        }
-        .job-title {
-            font-size: 18px;
-            font-weight: bold;
-            color: #007bff;
-            margin: 0 0 5px 0;
-        }
-        .job-company {
-            font-size: 14px;
-            color: #666;
-            margin: 3px 0;
-        }
-        .job-meta {
-            font-size: 13px;
-            color: #999;
-            margin: 5px 0;
-        }
-        .job-stack {
-            font-size: 12px;
-            margin: 8px 0;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-        .tag {
-            background: #e7f3ff;
-            color: #0066cc;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 12px;
-        }
-        .job-matched {
-            font-size: 12px;
-            color: #666;
-            margin: 5px 0;
-            font-style: italic;
-        }
-        .apply-btn {
-            display: inline-block;
-            background: #28a745;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 4px;
-            text-decoration: none;
-            font-weight: bold;
-            margin-top: 8px;
-        }
-        .apply-btn:hover {
-            background: #218838;
-        }
-        .source-badge {
-            display: inline-block;
-            background: #6c757d;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 11px;
-            margin-left: 8px;
-        }
-        .health-line {
-            background: #fff3cd;
-            border: 1px solid #ffc107;
-            border-radius: 4px;
-            padding: 10px;
-            margin: 15px 0;
-            font-size: 13px;
-            color: #856404;
-        }
-        .capped-notice {
-            background: #f0f0f0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 10px;
-            margin: 15px 0;
-            font-size: 13px;
-            color: #666;
-        }
-        .footer {
-            border-top: 1px solid #eee;
-            margin-top: 20px;
-            padding-top: 10px;
-            font-size: 12px;
-            color: #999;
-            text-align: center;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>Your JobWatch digest</title>
+  <!--
+    Email-safe markup: layout is tables, every style is inline (Gmail strips most <style> rules),
+    and nothing relies on flexbox/grid. The <style> block below only adds progressive extras
+    (mobile padding) for clients that support it.
+  -->
+  <style>
+    @media only screen and (max-width: 620px) {
+      .jw-shell { width: 100% !important; }
+      .jw-pad { padding-left: 18px !important; padding-right: 18px !important; }
+    }
+  </style>
 </head>
-<body>
-<div class="container">
-    <div class="header">
-        <h2 style="margin: 0;">New Job Opportunities</h2>
-    </div>
+<body style="margin:0;padding:0;background-color:#f4f3fb;-webkit-text-size-adjust:100%;">
 
-    <div th:if="${not #strings.isEmpty(healthLine)}" class="health-line" th:text="${healthLine}">
-        Health status here
-    </div>
+<!-- Inbox preview text (hidden) -->
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#f4f3fb;font-size:1px;line-height:1px;"
+     th:text="${preheader}">Preview of the top matches</div>
 
-    <div th:each="job : ${jobs}" class="job">
-        <div class="job-title">
-            <span th:text="${job.title}">Job Title</span>
-            <span class="source-badge" th:text="${job.source}">source</span>
-        </div>
-        <div class="job-company">
-            <strong th:text="${job.company}">Company</strong>
-        </div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f4f3fb"
+       style="background-color:#f4f3fb;">
+  <tr>
+    <td align="center" style="padding:24px 12px;">
 
-        <!-- Location and remote info -->
-        <div class="job-meta" th:if="${job.location != null or job.remote}">
-            <span th:if="${job.location != null}" th:text="${job.location}">Location</span>
-            <span th:if="${job.remote and job.location != null}" th:text="' · '"></span>
-            <span th:if="${job.remote}" th:text="'Remote'"></span>
-        </div>
+      <table role="presentation" class="jw-shell" width="600" cellpadding="0" cellspacing="0" border="0"
+             style="width:600px;max-width:600px;">
 
-        <!-- Experience and salary -->
-        <div class="job-meta" th:if="${job.minExperienceYears != null or job.salaryMin != null}">
-            <span th:if="${job.minExperienceYears != null}"
-                  th:text="${job.maxExperienceYears != null ? job.minExperienceYears + '-' + job.maxExperienceYears + '+ yrs' : job.minExperienceYears + '+ yrs'}">
-            </span>
-            <span th:if="${job.minExperienceYears != null and job.salaryMin != null}" th:text="' · '"></span>
-            <span th:if="${job.salaryMin != null}">
-                <span th:text="${#numbers.formatDecimal(job.salaryMin, 0, 0)}">Min</span>
-                <span th:if="${job.salaryMax != null}" th:text="${'-' + #numbers.formatDecimal(job.salaryMax, 0, 0)}">Max</span>
-                <span th:if="${job.salaryCurrency != null}" th:text="${job.salaryCurrency}">USD</span>
-                <span th:if="${job.salaryEstimated}" th:text="'(est.)'"></span>
-            </span>
-        </div>
+        <!-- ── Header ─────────────────────────────────────────────── -->
+        <tr>
+          <td bgcolor="#6355f5" class="jw-pad"
+              style="background-color:#6355f5;background-image:linear-gradient(135deg,#6355f5 0%,#a855f7 100%);border-radius:16px 16px 0 0;padding:26px 32px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                  <span style="display:inline-block;width:34px;height:34px;line-height:34px;text-align:center;border-radius:10px;background-color:rgba(255,255,255,0.22);color:#ffffff;font-size:18px;font-weight:800;vertical-align:middle;">J</span>
+                  <span style="color:#ffffff;font-size:20px;font-weight:800;vertical-align:middle;padding-left:8px;letter-spacing:0.2px;">JobWatch</span>
+                </td>
+                <td align="right" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#ece9ff;font-size:13px;"
+                    th:text="${today}">Monday, 24 November</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
 
-        <!-- Employment type -->
-        <div class="job-meta" th:if="${job.employmentType != null}" th:text="${job.employmentType}">
-            Employment Type
-        </div>
+        <!-- ── Greeting & summary ─────────────────────────────────── -->
+        <tr>
+          <td bgcolor="#ffffff" class="jw-pad"
+              style="background-color:#ffffff;padding:28px 32px 8px 32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+            <h1 style="margin:0 0 6px 0;font-size:24px;line-height:1.3;color:#1f1b3a;font-weight:800;">
+              <span th:if="${greetingName != ''}" th:text="'Good morning, ' + ${greetingName} + ' 👋'">Good morning, Priya 👋</span>
+              <span th:if="${greetingName == ''}">Good morning 👋</span>
+            </h1>
+            <p style="margin:0 0 18px 0;font-size:15px;line-height:1.55;color:#5b5873;">
+              <strong style="color:#1f1b3a;" th:text="${totalJobs} + ' new job' + (${totalJobs} == 1 ? '' : 's')">12 new jobs</strong>
+              matched your profiles since your last digest.
+            </p>
+            <!-- profile chips -->
+            <div style="margin:0 0 6px 0;">
+              <span th:each="s : ${sections}"
+                    style="display:inline-block;margin:0 6px 8px 0;padding:6px 12px;border-radius:999px;background-color:#f1effe;color:#4c43c9;font-size:13px;font-weight:600;">
+                <span th:text="${s.profile()}">backend-java</span>
+                <span style="display:inline-block;margin-left:6px;padding:0 7px;border-radius:999px;background-color:#6355f5;color:#ffffff;font-size:12px;line-height:18px;"
+                      th:text="${s.count()}">5</span>
+              </span>
+            </div>
+          </td>
+        </tr>
 
-        <!-- Tech stack -->
-        <div class="job-stack" th:if="${job.stack != null and !job.stack.isEmpty()}">
-            <span class="tag" th:each="tech : ${job.stack}" th:text="${tech}">tech</span>
-        </div>
+        <!-- ── Source health warning (only when a source failed) ─────── -->
+        <tr th:if="${healthLine != ''}">
+          <td bgcolor="#ffffff" class="jw-pad" style="background-color:#ffffff;padding:4px 32px 0 32px;">
+            <div style="padding:10px 14px;border-radius:10px;background-color:#fff7e6;border:1px solid #ffe2a8;color:#8a5a00;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;"
+                 th:text="${healthLine}">Some sources failed this run.</div>
+          </td>
+        </tr>
 
-        <!-- Apply button and source -->
-        <div style="margin-top: 10px;">
-            <a th:if="${job.applyUrl != null}" th:href="${job.applyUrl}" class="apply-btn" target="_blank">
-                Apply →
-            </a>
-        </div>
-    </div>
+        <!-- ── Sections: one per profile ────────────────────────────── -->
+        <th:block th:each="s : ${sections}">
+          <tr>
+            <td bgcolor="#ffffff" class="jw-pad"
+                style="background-color:#ffffff;padding:22px 32px 4px 32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              <span style="font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#6355f5;"
+                    th:text="${s.profile()}">backend-java</span>
+              <span style="font-size:12px;color:#9a97ad;padding-left:6px;"
+                    th:text="'· ' + ${s.count()} + (${s.count()} == 1 ? ' job' : ' jobs')">· 5 jobs</span>
+            </td>
+          </tr>
 
-    <!-- Capped notice -->
-    <div th:if="${isCapped}" class="capped-notice">
-        <strong>More jobs available:</strong> This digest shows the top 50 jobs.
-        <span th:text="${totalJobs - 50} + ' more'">X more</span> jobs matched your criteria.
-    </div>
+          <tr th:each="c : ${s.cards()}">
+            <td bgcolor="#ffffff" class="jw-pad" style="background-color:#ffffff;padding:8px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="border:1px solid #ebe9f5;border-radius:14px;">
+                <tr>
+                  <td style="padding:16px 18px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <!-- company initial -->
+                        <td width="44" valign="top" style="width:44px;padding-right:12px;">
+                          <div style="width:44px;height:44px;line-height:44px;border-radius:12px;background-color:#f1effe;color:#6355f5;text-align:center;font-size:18px;font-weight:800;"
+                               th:text="${c.initial()}">K</div>
+                        </td>
+                        <!-- title, company, meta -->
+                        <td valign="top">
+                          <span th:style="'display:inline-block;margin-bottom:6px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.2px;white-space:nowrap;color:' + ${c.matchColor()} + ';background-color:' + ${c.matchBackground()} + ';'"
+                                th:text="${c.matchLabel()}">Strong match</span><br>
+                          <a th:href="${c.applyUrl()}" target="_blank"
+                             style="color:#1f1b3a;text-decoration:none;font-size:16px;line-height:1.35;font-weight:700;"
+                             th:text="${c.title()}">Senior Java Developer</a>
+                          <div style="margin-top:2px;font-size:14px;color:#5b5873;font-weight:600;"
+                               th:if="${c.company() != ''}" th:text="${c.company()}">Kyndryl</div>
+                          <div style="margin-top:6px;font-size:13px;line-height:1.6;color:#7c7991;">
+                            <span th:if="${c.location() != ''}" th:text="'📍 ' + ${c.location()}">📍 Bengaluru</span>
+                            <span th:if="${c.remote()}"
+                                  style="display:inline-block;margin-left:4px;padding:0 8px;border-radius:999px;background-color:#e3f7ee;color:#0f7a4f;font-size:12px;font-weight:600;line-height:20px;">Remote</span>
+                            <span th:if="${c.posted() != ''}" th:text="'  ·  🕒 ' + ${c.posted()}">  ·  🕒 2h ago</span>
+                          </div>
+                          <div style="font-size:13px;line-height:1.6;color:#7c7991;"
+                               th:if="${c.details() != ''}" th:text="${c.details()}">💼 2–5 yrs  ·  💰 ₹12 L / yr  ·  Full-time</div>
+                        </td>
+                      </tr>
+                    </table>
 
-    <div class="footer">
-        <p>JobWatch digest • <a href="https://github.com/yourusername/jobwatch">source</a></p>
-    </div>
-</div>
+                    <!-- skills -->
+                    <div style="margin-top:12px;" th:if="${!c.stack().isEmpty()}">
+                      <span th:each="t : ${c.stack()}"
+                            style="display:inline-block;margin:0 6px 6px 0;padding:3px 10px;border-radius:8px;background-color:#f6f5fb;border:1px solid #ebe9f5;color:#4a4665;font-size:12px;font-weight:600;"
+                            th:text="${t}">spring boot</span>
+                    </div>
+
+                    <!-- apply -->
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:12px;"
+                           th:if="${c.applyUrl() != ''}">
+                      <tr>
+                        <td bgcolor="#6355f5" style="border-radius:10px;background-color:#6355f5;">
+                          <a th:href="${c.applyUrl()}" target="_blank"
+                             style="display:inline-block;padding:10px 18px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">View &amp; apply →</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </th:block>
+
+        <!-- ── More than the cap ───────────────────────────────────── -->
+        <tr th:if="${isCapped}">
+          <td bgcolor="#ffffff" class="jw-pad"
+              style="background-color:#ffffff;padding:14px 32px 0 32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;color:#5b5873;">
+            <span th:text="'Showing your top ' + ${shownJobs} + ' of ' + ${totalJobs} + ' matches.'">Showing your top 50 of 64 matches.</span>
+            <a th:href="${dashboardUrl} + '/jobs'" style="color:#6355f5;font-weight:700;text-decoration:none;">See them all →</a>
+          </td>
+        </tr>
+
+        <!-- ── Call to action ─────────────────────────────────────── -->
+        <tr>
+          <td bgcolor="#ffffff" align="center" class="jw-pad"
+              style="background-color:#ffffff;padding:26px 32px 30px 32px;border-radius:0 0 16px 16px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td bgcolor="#1f1b3a" style="border-radius:12px;background-color:#1f1b3a;">
+                  <a th:href="${dashboardUrl} + '/jobs'" target="_blank"
+                     style="display:inline-block;padding:13px 26px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:12px;">Open your dashboard</a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:12px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;color:#7c7991;">
+              Mark jobs as applied and filter by location there.
+            </p>
+          </td>
+        </tr>
+
+        <!-- ── Footer ─────────────────────────────────────────────── -->
+        <tr>
+          <td align="center" style="padding:20px 24px 8px 24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:1.7;color:#9a97ad;">
+            You get this email because the daily digest is on for your JobWatch account.<br>
+            <a th:href="${dashboardUrl} + '/profiles'" style="color:#6355f5;text-decoration:none;font-weight:600;">Edit your profiles</a>
+            &nbsp;·&nbsp;
+            <a th:href="${dashboardUrl} + '/account'" style="color:#6355f5;text-decoration:none;font-weight:600;">Turn off daily email</a>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
 </body>
 </html>
-

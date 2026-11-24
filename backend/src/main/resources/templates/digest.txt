@@ -1,24 +1,19 @@
-JobWatch Job Digest
-===================
+[# th:if="${greetingName != ''}"]Good morning, [(${greetingName})]![/][# th:if="${greetingName == ''}"]Good morning![/]
 
-[[${healthLine}]]
+[(${totalJobs})] new job[# th:if="${totalJobs != 1}"]s[/] matched your profiles ([(${today})]).
+[# th:if="${healthLine != ''}"]
+Note: [(${healthLine})]
+[/][# th:each="s : ${sections}"]
 
----
-
-[# th:each="job : ${jobs}"]
-[[${job.title}]] at [[${job.company}]]
-[# th:if="${job.location != null}" th:text="'Location: ' + ${job.location}" /]
-[# th:if="${job.remote}" th:text="'Remote'" /]
-[# th:if="${job.minExperienceYears != null}" th:text="'Experience: ' + ${job.minExperienceYears} + '+ years'" /]
-[# th:if="${job.salaryMin != null}" th:text="'Salary: ' + ${job.salaryMin} + ' ' + (${job.salaryCurrency} ?: '')" /]
-[# th:if="${job.employmentType != null}" th:text="'Type: ' + ${job.employmentType}" /]
-[# th:if="${job.stack != null and !job.stack.isEmpty()}" th:text="'Stack: ' + ${#strings.listJoin(job.stack, ', ')}" /]
-Apply: [[${job.applyUrl}]]
-Source: [[${job.source}]]
-
----
-
+== [(${s.profile()})] · [(${s.count()})] job[# th:if="${s.count() != 1}"]s[/] ==
+[# th:each="c : ${s.cards()}"]
+* [(${c.title()})][# th:if="${c.company() != ''}"] — [(${c.company()})][/]
+  [(${c.plainDetails()})]
+[# th:if="${!c.stack().isEmpty()}"]  Skills: [(${#strings.listJoin(c.stack(), ', ')})]
+[/][# th:if="${c.applyUrl() != ''}"]  Apply: [(${c.applyUrl()})]
+[/][/][/]
+[# th:if="${isCapped}"]Showing your top [(${shownJobs})] of [(${totalJobs})] matches. See them all: [(${dashboardUrl})]/jobs
 [/]
-[# th:if="${isCapped}" th:text="'More jobs available: top 50 shown; ' + (${totalJobs} - 50) + ' more matched.'" /]
-JobWatch • https://github.com/yourusername/jobwatch
-
+Open your dashboard: [(${dashboardUrl})]/jobs
+Edit your profiles: [(${dashboardUrl})]/profiles
+Turn off daily email: [(${dashboardUrl})]/account

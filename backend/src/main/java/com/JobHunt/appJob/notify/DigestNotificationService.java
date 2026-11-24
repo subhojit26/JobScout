@@ -82,7 +82,7 @@ public class DigestNotificationService {
             }
         }
 
-        DigestEmail digest = digestBuilder.build(matches, sourceHealthLine);
+        DigestEmail digest = digestBuilder.build(matches, sourceHealthLine, user.name());
         if (digest == null) {
             return true;
         }
